@@ -3,8 +3,9 @@
 A [TizenBrew](https://github.com/reisxd/TizenBrew) module that makes any website usable on a Samsung Tizen TV.
 
 - **Cursor on the TV remote:** arrows move it (it speeds up when held), OK clicks
+- **Yellow** jump mode: arrows hop between links and buttons, OK opens
 - **CH ▲ / CH ▼** scroll · **Back** goes back · **Red** toggles the cursor · **Green** opens the start page
-- **Phone control** (with the companion Home launcher): touchpad, two-finger scroll, typing into the focused field, URL bar
+- **Phone control:** scan the QR on the start page — touchpad, two-finger scroll, typing, URL bar, per-site text size
 
 Install: TizenBrew → Module Manager → add `gh/prutxvi/tv-browser-plus`.
 

@@ -8,7 +8,7 @@
   window.__tvBrowserPlus = true;
 
   var START = 'https://tv-remote.pvhome.workers.dev/browser';
-  var KEY = { left: 37, up: 38, right: 39, down: 40, ok: 13, back: 10009, red: 403, green: 404, chUp: 427, chDown: 428 };
+  var KEY = { left: 37, up: 38, right: 39, down: 40, ok: 13, back: 10009, red: 403, green: 404, yellow: 405, chUp: 427, chDown: 428 };
 
   var x = innerWidth / 2, y = innerHeight / 2, cursorOn = true, cursor = null, toastEl = null;
 
@@ -147,13 +147,85 @@
     else if (v === 'back') { if (history.length > 1) history.back(); else location.href = START; }
   }
 
+  // ---------- jump mode: arrows hop between links and buttons ----------
+  var jumpOn = false, jumpEl = null, box = null;
+  var CLICKABLE = 'a[href],button,input:not([type=hidden]),select,textarea,summary,[role=button],[role=link],[role=tab],[role=menuitem],[onclick],[tabindex]:not([tabindex="-1"])';
+  function visibleRect(el) {
+    var r = el.getBoundingClientRect();
+    if (r.width < 6 || r.height < 6) return null;
+    var st = getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none' || st.opacity === '0') return null;
+    return r;
+  }
+  function drawBox() {
+    if (!box) {
+      box = document.createElement('div');
+      box.style.cssText = 'position:fixed;left:0;top:0;border:4px solid #ff2a2a;border-radius:10px;box-shadow:0 0 0 3px rgba(0,0,0,.6),0 0 22px rgba(255,42,42,.7);' +
+        'z-index:2147483646;pointer-events:none;will-change:transform;';
+      document.documentElement.appendChild(box);
+    }
+    var r = jumpEl && visibleRect(jumpEl);
+    if (!jumpOn || !r) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    box.style.width = (r.width + 12) + 'px'; box.style.height = (r.height + 12) + 'px';
+    box.style.transform = 'translate3d(' + (r.left - 6) + 'px,' + (r.top - 6) + 'px,0)';
+  }
+  function select(el) {
+    jumpEl = el;
+    var r = el.getBoundingClientRect();
+    if (r.top < 60 || r.bottom > innerHeight - 60) { el.scrollIntoView({ block: 'center' }); r = el.getBoundingClientRect(); }
+    x = r.left + r.width / 2; y = r.top + r.height / 2;   // keep the cursor on it, so phone taps match
+    draw(); drawBox();
+  }
+  // Pick the nearest clickable thing in the pressed direction; sideways offset costs more than distance.
+  function jump(dx, dy) {
+    var from = jumpEl && jumpEl.isConnected ? jumpEl.getBoundingClientRect() : { left: x, top: y, width: 0, height: 0 };
+    var cx = from.left + from.width / 2, cy = from.top + from.height / 2, best = null, bestScore = Infinity;
+    var all = document.querySelectorAll(CLICKABLE);
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (el === jumpEl) continue;
+      var r = visibleRect(el);
+      if (!r || r.bottom < -innerHeight || r.top > innerHeight * 2) continue;
+      var ex = r.left + r.width / 2, ey = r.top + r.height / 2;
+      var main = dx ? (ex - cx) * dx : (ey - cy) * dy, side = dx ? Math.abs(ey - cy) : Math.abs(ex - cx);
+      if (main <= 4) continue;
+      var score = main + side * 2.5;
+      if (score < bestScore) { bestScore = score; best = el; }
+    }
+    if (best) select(best);
+    else if (dy) scroll(dy * innerHeight * 0.6);
+  }
+  function setJump(on) {
+    jumpOn = on; cursorOn = !on;
+    if (on) {
+      // Start on whatever clickable thing is closest to the cursor.
+      var all = document.querySelectorAll(CLICKABLE), best = null, bd = Infinity;
+      for (var i = 0; i < all.length; i++) {
+        var r = visibleRect(all[i]);
+        if (!r || r.bottom < 0 || r.top > innerHeight) continue;
+        var d = Math.pow(r.left + r.width / 2 - x, 2) + Math.pow(r.top + r.height / 2 - y, 2);
+        if (d < bd) { bd = d; best = all[i]; }
+      }
+      jumpEl = null;
+      if (best) select(best);
+      toast('Jump mode · Yellow to switch');
+    }
+    else toast('Cursor mode');
+    draw(); drawBox();
+  }
+  window.addEventListener('scroll', function () { if (jumpOn) requestAnimationFrame(drawBox); }, true);
+
   // ---------- TV remote ----------
   // Held arrows speed up, so crossing the screen doesn't take forever.
   var lastKey = 0, lastAt = 0, streak = 0;
   window.addEventListener('keydown', function (e) {
     if (!e.isTrusted) return;   // our own synthetic Enter/Backspace from the phone
     var k = e.keyCode, handled = true;
-    if (k === KEY.red) { cursorOn = !cursorOn; draw(); toast(cursorOn ? 'Cursor on' : 'Cursor off'); }
+    if (k === KEY.yellow) setJump(!jumpOn);
+    else if (jumpOn && k >= 37 && k <= 40) jump(k === KEY.left ? -1 : k === KEY.right ? 1 : 0, k === KEY.up ? -1 : k === KEY.down ? 1 : 0);
+    else if (jumpOn && k === KEY.ok) { if (jumpEl) { jumpEl.focus && jumpEl.focus(); click(); } }
+    else if (k === KEY.red) { if (jumpOn) setJump(false); else { cursorOn = !cursorOn; draw(); toast(cursorOn ? 'Cursor on' : 'Cursor off'); } }
     else if (k === KEY.green) nav('start');
     else if (k === KEY.chUp) scroll(-innerHeight * 0.7);
     else if (k === KEY.chDown) scroll(innerHeight * 0.7);
@@ -172,7 +244,7 @@
 
   // ---------- phone, via the launcher's local service ----------
   function handle(m) {
-    if (m.t === 'mv') { if (!cursorOn) { cursorOn = true; } move(+m.dx || 0, +m.dy || 0); }
+    if (m.t === 'mv') { if (jumpOn) setJump(false); cursorOn = true; move(+m.dx || 0, +m.dy || 0); }
     else if (m.t === 'tap') click();
     else if (m.t === 'scroll') scroll(+m.dy || 0);
     else if (m.t === 'text' && typeof m.s === 'string') typeText(m.s);
