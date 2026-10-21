@@ -11,6 +11,8 @@
   var LOCAL = '127.0.0.1:8090';
   var KEY = { left: 37, up: 38, right: 39, down: 40, ok: 13, back: 10009, red: 403, green: 404, chUp: 427, chDown: 428 };
 
+  function diag(m) { try { new Image().src = 'https://tv-remote.pvhome.workers.dev/log?m=' + encodeURIComponent(location.host + ' ' + m); } catch (e) {} }
+  diag('injected v1.1.1 ua=' + navigator.userAgent.slice(-30));
   var x = innerWidth / 2, y = innerHeight / 2, cursorOn = true, cursor = null, toastEl = null;
 
   // ---------- cursor and toast ----------
@@ -162,6 +164,7 @@
   // On the start page, draw the phone pairing QR so you never have to leave the browser.
   function showPairCode(room) {
     var cv = document.getElementById('pairqr');
+    diag('pair: canvas=' + !!cv + ' qrcode=' + typeof qrcode);
     if (!cv || typeof qrcode !== 'function') return;
     var req = new XMLHttpRequest();
     req.open('GET', 'http://' + LOCAL + '/ip');
@@ -187,17 +190,19 @@
     req.timeout = 2000;
     req.onload = function () {
       var room = (req.responseText || '').trim();
+      diag('room status=' + req.status + ' len=' + room.length);
       if (!/^[a-z0-9]{12,32}$/.test(room)) return toast('Open the Home launcher once to pair your phone');
       var ws;
       try { ws = new WebSocket('ws://' + LOCAL + '/ws/' + room + '?role=tv'); }
       catch (e) { return setTimeout(function () { connect(retry); }, retry); }
-      ws.onopen = function () { ws.send(JSON.stringify({ t: 'screen', s: 'browser' })); };
+      ws.onopen = function () { diag('ws open'); ws.send(JSON.stringify({ t: 'screen', s: 'browser' })); };
+      ws.onerror = function () { diag('ws error'); };
       showPairCode(room);
       ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
       ws.onclose = function () { setTimeout(function () { connect(Math.min(retry * 2, 10000)); }, retry); };
     };
     // Some sites block extra connections (strict Content-Security-Policy); the remote still works there.
-    req.onerror = req.ontimeout = function () { if (retry < 8000) setTimeout(function () { connect(retry * 2); }, retry); };
+    req.onerror = req.ontimeout = function (e) { diag('room fetch failed: ' + (e && e.type)); if (retry < 8000) setTimeout(function () { connect(retry * 2); }, retry); };
     req.send();
   }
   connect(1000);
