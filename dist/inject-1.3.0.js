@@ -10,8 +10,6 @@
   var START = 'https://tv-remote.pvhome.workers.dev/browser';
   var KEY = { left: 37, up: 38, right: 39, down: 40, ok: 13, back: 10009, red: 403, green: 404, chUp: 427, chDown: 428 };
 
-  function diag(m) { try { new Image().src = 'https://tv-remote.pvhome.workers.dev/log?m=' + encodeURIComponent(location.host + ' ' + m); } catch (e) {} }
-  diag('injected v1.2.0 ua=' + navigator.userAgent.slice(-30));
   var x = innerWidth / 2, y = innerHeight / 2, cursorOn = true, cursor = null, toastEl = null;
 
   // ---------- cursor and toast ----------
@@ -20,7 +18,7 @@
     cursor = document.createElement('div');
     cursor.style.cssText = 'position:fixed;left:0;top:0;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;' +
       'border:4px solid #fff;box-shadow:0 0 0 2px #000,0 0 18px rgba(0,0,0,.6);z-index:2147483647;pointer-events:none;' +
-      'transition:transform .05s linear,opacity .3s;';
+      'will-change:transform;transition:opacity .3s;';
     var dot = document.createElement('div');
     dot.style.cssText = 'position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:#ff2a2a';
     cursor.appendChild(dot);
@@ -32,10 +30,16 @@
     document.documentElement.appendChild(toastEl);
     draw();
   }
+  // Movement can arrive many times per frame from the phone; paint once per frame.
+  var drawQueued = false;
   function draw() {
-    if (!cursor) return;
-    cursor.style.transform = 'translate(' + x + 'px,' + y + 'px)';
-    cursor.style.opacity = cursorOn ? '1' : '0';
+    if (!cursor || drawQueued) return;
+    drawQueued = true;
+    requestAnimationFrame(function () {
+      drawQueued = false;
+      cursor.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0)';
+      cursor.style.opacity = cursorOn ? '1' : '0';
+    });
   }
   function toast(t) {
     if (!toastEl) return;
@@ -72,7 +76,7 @@
     if (el.focus) el.focus();
     ['pointerup', 'mouseup'].forEach(function (t) { el.dispatchEvent(new MouseEvent(t, opts)); });
     el.click();
-    if (cursor) { cursor.style.transform += ' scale(.7)'; setTimeout(draw, 120); }
+    if (cursor) { cursor.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0) scale(.7)'; setTimeout(draw, 120); }
     if (isTypable(document.activeElement)) toast('Type on your phone');
   }
   function isTypable(el) {
@@ -208,9 +212,8 @@
     if (location.href.indexOf(START) === 0) showPairCode(room);
     var ws;
     try { ws = new WebSocket('wss://' + CLOUD + '/ws/' + room + '?role=tv'); }
-    catch (e) { diag('ws blocked ' + e.message); return; }    // strict CSP on this site
-    ws.onopen = function () { diag('ws open'); ws.send(JSON.stringify({ t: 'screen', s: 'browser' })); };
-    ws.onerror = function () { diag('ws error'); };
+    catch (e) { return; }    // strict CSP on this site
+    ws.onopen = function () { ws.send(JSON.stringify({ t: 'screen', s: 'browser' })); };
     ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
     ws.onclose = function () { setTimeout(function () { connect(Math.min(retry * 2, 10000)); }, retry); };
   }
