@@ -2,17 +2,16 @@
 //
 // Adds a cursor you drive with the TV remote or a phone touchpad, phone-keyboard
 // typing into the focused field, scrolling and back/start navigation. The phone
-// talks to the TV through the Home launcher's local service on 127.0.0.1:8090.
+// pairs through the tv-remote Worker using the QR on the start page.
 (function () {
   if (window.top !== window || window.__tvBrowserPlus) return;
   window.__tvBrowserPlus = true;
 
   var START = 'https://tv-remote.pvhome.workers.dev/browser';
-  var LOCAL = '127.0.0.1:8090';
   var KEY = { left: 37, up: 38, right: 39, down: 40, ok: 13, back: 10009, red: 403, green: 404, chUp: 427, chDown: 428 };
 
   function diag(m) { try { new Image().src = 'https://tv-remote.pvhome.workers.dev/log?m=' + encodeURIComponent(location.host + ' ' + m); } catch (e) {} }
-  diag('injected v1.1.3 ua=' + navigator.userAgent.slice(-30));
+  diag('injected v1.2.0 ua=' + navigator.userAgent.slice(-30));
   var x = innerWidth / 2, y = innerHeight / 2, cursorOn = true, cursor = null, toastEl = null;
 
   // ---------- cursor and toast ----------
@@ -161,53 +160,59 @@
       else if (m.c >= 37 && m.c <= 40) move(m.c === 37 ? -60 : m.c === 39 ? 60 : 0, m.c === 38 ? -60 : m.c === 40 ? 60 : 0);
     }
   }
-  // On the start page, draw the phone pairing QR so you never have to leave the browser.
+  // ---------- phone pairing (through the secure cloud relay) ----------
+  // https pages may not talk to the TV's local http service, so the browser
+  // pairs through the Worker. The start page owns a private room ID and hands
+  // it to later pages in window.name, which survives navigating between sites.
+  var CLOUD = 'tv-remote.pvhome.workers.dev';
+  function browserRoom() {
+    var m = /(?:^|;)tvb:([a-z0-9]{20})/.exec(window.name || '');
+    if (location.href.indexOf(START) === 0) {
+      var id = '';
+      try { id = localStorage.getItem('tvbroom') || ''; } catch (e) {}
+      if (!/^[a-z0-9]{20}$/.test(id)) {
+        var chars = 'abcdefghijklmnopqrstuvwxyz0123456789', bytes = new Uint8Array(20);
+        crypto.getRandomValues(bytes);
+        id = '';
+        for (var i = 0; i < 20; i++) id += chars.charAt(bytes[i] % chars.length);
+        try { localStorage.setItem('tvbroom', id); } catch (e) {}
+      }
+      window.name = 'tvb:' + id;
+      return id;
+    }
+    return m ? m[1] : '';
+  }
+
+  // On the start page, draw the pairing QR in dots.
   function showPairCode(room) {
     var cv = document.getElementById('pairqr');
-    diag('pair: canvas=' + !!cv + ' qrcode=' + typeof qrcode);
-    // The page loads the QR library after we connect, so wait for it.
     if (!cv || typeof qrcode !== 'function') {
-      if ((showPairCode.tries = (showPairCode.tries || 0) + 1) < 40) setTimeout(function () { showPairCode(room); }, 250);
+      // The page loads the QR library after we start, so wait for it.
+      if ((showPairCode.tries = (showPairCode.tries || 0) + 1) < 60) setTimeout(function () { showPairCode(room); }, 250);
       return;
     }
-    var req = new XMLHttpRequest();
-    req.open('GET', 'http://' + LOCAL + '/ip');
-    req.onload = function () {
-      var ip = (req.responseText || '').trim();
-      if (!ip) return;
-      var qr = qrcode(0, 'M');
-      qr.addData('http://' + ip + ':8090/r/' + room);
-      qr.make();
-      var n = qr.getModuleCount(), cell = 6, ctx = cv.getContext('2d');
-      cv.width = cv.height = (n + 2) * cell;
-      ctx.fillStyle = '#fff';
-      for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (qr.isDark(r, c)) {
-        ctx.beginPath(); ctx.arc((c + 1.5) * cell, (r + 1.5) * cell, cell * 0.46, 0, 6.2832); ctx.fill();
-      }
-    };
-    req.send();
+    var qr = qrcode(0, 'M');
+    qr.addData('https://' + CLOUD + '/r/' + room);
+    qr.make();
+    var n = qr.getModuleCount(), cell = 6, ctx = cv.getContext('2d');
+    cv.width = cv.height = (n + 2) * cell;
+    ctx.fillStyle = '#fff';
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (qr.isDark(r, c)) {
+      ctx.beginPath(); ctx.arc((c + 1.5) * cell, (r + 1.5) * cell, cell * 0.46, 0, 6.2832); ctx.fill();
+    }
   }
 
   function connect(retry) {
-    var req = new XMLHttpRequest();
-    req.open('GET', 'http://' + LOCAL + '/room');
-    req.timeout = 2000;
-    req.onload = function () {
-      var room = (req.responseText || '').trim();
-      diag('room status=' + req.status + ' len=' + room.length);
-      if (!/^[a-z0-9]{12,32}$/.test(room)) return toast('Open the Home launcher once to pair your phone');
-      var ws;
-      try { ws = new WebSocket('ws://' + LOCAL + '/ws/' + room + '?role=tv'); }
-      catch (e) { return setTimeout(function () { connect(retry); }, retry); }
-      ws.onopen = function () { diag('ws open'); ws.send(JSON.stringify({ t: 'screen', s: 'browser' })); };
-      ws.onerror = function () { diag('ws error'); };
-      showPairCode(room);
-      ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
-      ws.onclose = function () { setTimeout(function () { connect(Math.min(retry * 2, 10000)); }, retry); };
-    };
-    // Some sites block extra connections (strict Content-Security-Policy); the remote still works there.
-    req.onerror = req.ontimeout = function (e) { diag('room fetch failed: ' + (e && e.type)); if (retry < 8000) setTimeout(function () { connect(retry * 2); }, retry); };
-    req.send();
+    var room = browserRoom();
+    if (!room) return toast('Press Green to reconnect your phone');
+    if (location.href.indexOf(START) === 0) showPairCode(room);
+    var ws;
+    try { ws = new WebSocket('wss://' + CLOUD + '/ws/' + room + '?role=tv'); }
+    catch (e) { diag('ws blocked ' + e.message); return; }    // strict CSP on this site
+    ws.onopen = function () { diag('ws open'); ws.send(JSON.stringify({ t: 'screen', s: 'browser' })); };
+    ws.onerror = function () { diag('ws error'); };
+    ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
+    ws.onclose = function () { setTimeout(function () { connect(Math.min(retry * 2, 10000)); }, retry); };
   }
   connect(1000);
 })();
