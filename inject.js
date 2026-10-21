@@ -12,7 +12,7 @@
   var KEY = { left: 37, up: 38, right: 39, down: 40, ok: 13, back: 10009, red: 403, green: 404, chUp: 427, chDown: 428 };
 
   function diag(m) { try { new Image().src = 'https://tv-remote.pvhome.workers.dev/log?m=' + encodeURIComponent(location.host + ' ' + m); } catch (e) {} }
-  diag('injected v1.1.1 ua=' + navigator.userAgent.slice(-30));
+  diag('injected v1.1.2 ua=' + navigator.userAgent.slice(-30));
   var x = innerWidth / 2, y = innerHeight / 2, cursorOn = true, cursor = null, toastEl = null;
 
   // ---------- cursor and toast ----------

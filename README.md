@@ -9,3 +9,7 @@ A [TizenBrew](https://github.com/reisxd/TizenBrew) module that makes any website
 Install: TizenBrew → Module Manager → add `gh/prutxvi/tv-browser-plus`.
 
 Some sites block extra connections with a strict Content-Security-Policy; on those the TV remote cursor still works, but phone control may not.
+
+## Releasing
+jsDelivr caches files for hours, so every release ships the script under a new name:
+copy `inject.js` to `dist/inject-<version>.js`, point `main` in `package.json` at it, then tag `v<version>`.
