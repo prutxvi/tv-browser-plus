@@ -1,7 +1,7 @@
 {
   "name": "tv-browser-plus",
   "appName": "TV Browser+",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "A TV-friendly browser for Samsung Tizen TVs: remote-driven cursor, phone touchpad and keyboard, scrolling and quick navigation.",
   "packageType": "mods",
   "websiteURL": "https://tv-remote.pvhome.workers.dev/browser",

@@ -159,6 +159,28 @@
       else if (m.c >= 37 && m.c <= 40) move(m.c === 37 ? -60 : m.c === 39 ? 60 : 0, m.c === 38 ? -60 : m.c === 40 ? 60 : 0);
     }
   }
+  // On the start page, draw the phone pairing QR so you never have to leave the browser.
+  function showPairCode(room) {
+    var cv = document.getElementById('pairqr');
+    if (!cv || typeof qrcode !== 'function') return;
+    var req = new XMLHttpRequest();
+    req.open('GET', 'http://' + LOCAL + '/ip');
+    req.onload = function () {
+      var ip = (req.responseText || '').trim();
+      if (!ip) return;
+      var qr = qrcode(0, 'M');
+      qr.addData('http://' + ip + ':8090/r/' + room);
+      qr.make();
+      var n = qr.getModuleCount(), cell = 6, ctx = cv.getContext('2d');
+      cv.width = cv.height = (n + 2) * cell;
+      ctx.fillStyle = '#fff';
+      for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (qr.isDark(r, c)) {
+        ctx.beginPath(); ctx.arc((c + 1.5) * cell, (r + 1.5) * cell, cell * 0.46, 0, 6.2832); ctx.fill();
+      }
+    };
+    req.send();
+  }
+
   function connect(retry) {
     var req = new XMLHttpRequest();
     req.open('GET', 'http://' + LOCAL + '/room');
@@ -170,6 +192,7 @@
       try { ws = new WebSocket('ws://' + LOCAL + '/ws/' + room + '?role=tv'); }
       catch (e) { return setTimeout(function () { connect(retry); }, retry); }
       ws.onopen = function () { ws.send(JSON.stringify({ t: 'screen', s: 'browser' })); };
+      showPairCode(room);
       ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
       ws.onclose = function () { setTimeout(function () { connect(Math.min(retry * 2, 10000)); }, retry); };
     };
