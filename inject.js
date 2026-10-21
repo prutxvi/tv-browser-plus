@@ -120,6 +120,28 @@
       if (el.form.requestSubmit) el.form.requestSubmit(); else el.form.submit();
     }
   }
+  // Text size per site (sites are built for laptops, read from the sofa).
+  var ZOOMS = [0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+  function applyZoom(z) {
+    if (!document.body) return;
+    document.body.style.zoom = z === 1 ? '' : String(z);
+  }
+  function savedZoom() {
+    var z = 1;
+    try { z = parseFloat(localStorage.getItem('tvbZoom')) || 1; } catch (e) {}
+    return z;
+  }
+  function zoom(dir) {
+    var z = savedZoom(), i = ZOOMS.indexOf(z);
+    if (i < 0) i = ZOOMS.indexOf(1);
+    z = dir === 0 ? 1 : ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i + dir))];
+    try { localStorage.setItem('tvbZoom', String(z)); } catch (e) {}
+    applyZoom(z);
+    toast('Text size ' + Math.round(z * 100) + '%');
+  }
+  function restoreZoom() { var z = savedZoom(); if (z !== 1) applyZoom(z); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', restoreZoom); else restoreZoom();
+
   function nav(v) {
     if (v === 'start') location.href = START;
     else if (v === 'back') { if (history.length > 1) history.back(); else location.href = START; }
@@ -157,6 +179,7 @@
     else if (m.t === 'key' && (m.k === 'Enter' || m.k === 'Backspace')) pressKey(m.k);
     else if (m.t === 'go' && /^https?:\/\//.test(m.url || '')) location.href = m.url;
     else if (m.t === 'nav') nav(m.v);
+    else if (m.t === 'zoom') zoom(m.v > 0 ? 1 : m.v < 0 ? -1 : 0);
     else if (m.t === 'k' && m.d) {
       // Plain D-pad presses from the phone behave like the TV remote.
       if (m.c === KEY.ok) click();
