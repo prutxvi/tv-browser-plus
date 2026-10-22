@@ -9,6 +9,8 @@ A [TizenBrew](https://github.com/reisxd/TizenBrew) module that makes any website
 
 Install: TizenBrew → Module Manager → add `gh/prutxvi/tv-browser-plus`.
 
+Phone ↔ TV traffic goes **directly over Wi-Fi via WebRTC** once the phone is paired (the relay only introduces them); it falls back to the relay if a direct link can't form. The phone shows the live delay ("Direct · 12 ms" or "Internet · 160 ms").
+
 Some sites block extra connections with a strict Content-Security-Policy; on those the TV remote cursor still works, but phone control may not.
 
 ## Releasing

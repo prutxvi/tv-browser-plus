@@ -301,6 +301,34 @@
     }
   }
 
+  // Direct phone↔TV link: the phone offers a WebRTC connection through the relay;
+  // once it's up, touchpad traffic flows over the Wi-Fi instead of via the cloud.
+  var ICE = [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }];
+  var rtcPc = null;
+  function rtcSignal(m, ws) {
+    var send = function (o) { try { ws.send(JSON.stringify(o)); } catch (e) {} };
+    if (m.sdp && m.sdp.type === 'offer') {
+      if (rtcPc) { try { rtcPc.close(); } catch (e) {} }
+      var pc = rtcPc = new RTCPeerConnection({ iceServers: ICE });
+      pc.onicecandidate = function (e) { if (e.candidate) send({ t: 'rtc', ice: e.candidate }); };
+      pc.ondatachannel = function (e) {
+        var ch = e.channel;
+        ch.onmessage = function (ev) {
+          var msg; try { msg = JSON.parse(ev.data); } catch (err) { return; }
+          if (msg.t === 'ping') { try { ch.send(JSON.stringify({ t: 'pong', id: msg.id })); } catch (err) {} return; }
+          handle(msg);
+        };
+      };
+      pc.setRemoteDescription(m.sdp)
+        .then(function () { return pc.createAnswer(); })
+        .then(function (a) { return pc.setLocalDescription(a); })
+        .then(function () { send({ t: 'rtc', sdp: pc.localDescription }); })
+        .catch(function () {});
+    } else if (m.ice && rtcPc) {
+      rtcPc.addIceCandidate(m.ice).catch(function () {});
+    }
+  }
+
   function connect(retry) {
     var room = browserRoom();
     if (!room) return toast('Press Green to reconnect your phone');
@@ -309,7 +337,12 @@
     try { ws = new WebSocket('wss://' + CLOUD + '/ws/' + room + '?role=tv'); }
     catch (e) { return; }    // strict CSP on this site
     ws.onopen = function () { ws.send(JSON.stringify({ t: 'screen', s: 'browser' })); };
-    ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
+    ws.onmessage = function (ev) {
+      var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.t === 'rtc') return rtcSignal(m, ws);
+      if (m.t === 'ping') return ws.send(JSON.stringify({ t: 'pong', id: m.id }));
+      handle(m);
+    };
     ws.onclose = function () { setTimeout(function () { connect(Math.min(retry * 2, 10000)); }, retry); };
   }
   connect(1000);
