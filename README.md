@@ -9,6 +9,8 @@
 ![Version 1.6.0](https://img.shields.io/badge/version-1.6.0-ffffff?style=flat-square&labelColor=000)
 ![Status beta](https://img.shields.io/badge/status-beta-ff2a2a?style=flat-square&labelColor=000)
 
+**[How it was built →](https://tv-hack.pvhome.workers.dev/log/tv-browser)** &nbsp;·&nbsp; [DotOS](https://github.com/prutxvi/samsung-tv-dotos)
+
 <img src="docs/media/browser.gif" alt="Typing a Google search on the TV using the phone's keyboard" width="100%">
 
 </div>
